@@ -269,4 +269,7 @@ def clear() -> tuple[Path, int]:
     folder = cache_dir()
     if (folder.exists() or folder.is_symlink()) and not _own_folder(folder):
         raise OSError(f"{folder} is a link or not a folder, so wheelgap won't clear it; remove it yourself")
-    return folder, _clear_folder(folder) + _clear_folder(folder.parent / "pinned-v1")
+    count = _clear_folder(folder)
+    with contextlib.suppress(OSError):  # an obsolete folder we can't empty never fails --clear-cache
+        count += _clear_folder(folder.parent / "pinned-v1")
+    return folder, count

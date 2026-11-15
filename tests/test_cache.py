@@ -482,6 +482,24 @@ def test_legacy_cache_prune_error_does_not_prevent_current_prune(monkeypatch, le
     assert not entry.exists()
 
 
+def test_legacy_cache_clear_error_does_not_fail_clear(monkeypatch, legacy_cache):
+    legacy, current = legacy_cache
+    (legacy / ENTRY_NAME).write_text("{}", encoding="utf-8")
+    current.mkdir()
+    (current / ENTRY_NAME).write_text("{}", encoding="utf-8")
+    own_files = cache._own_files
+
+    def unreadable_legacy(folder):
+        if folder == legacy:
+            raise PermissionError("unreadable legacy cache")
+        return own_files(folder)
+
+    monkeypatch.setattr(cache, "_own_files", unreadable_legacy)
+    assert cache.clear() == (current, 1)
+    assert not current.exists()
+    assert (legacy / ENTRY_NAME).exists()
+
+
 def test_clear_cache_reports_legacy_entries_when_current_cache_is_missing(capsys, legacy_cache):
     legacy, current = legacy_cache
     (legacy / ENTRY_NAME).write_text("{}", encoding="utf-8")
