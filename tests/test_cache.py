@@ -500,6 +500,28 @@ def test_legacy_cache_clear_error_does_not_fail_clear(monkeypatch, legacy_cache)
     assert (legacy / ENTRY_NAME).exists()
 
 
+@pytest.mark.parametrize("operation", ["prune", "clear"])
+def test_legacy_cache_entry_that_cannot_be_deleted_does_not_stop_the_rest(monkeypatch, legacy_cache, operation):
+    legacy, current = legacy_cache
+    blocked = legacy / ENTRY_NAME
+    others = [legacy / (digit * 64 + ".json") for digit in "12"]
+    for entry in [blocked, *others]:
+        entry.write_text("{}", encoding="utf-8")
+    unlink = os.unlink
+
+    def held_open(path, *args, **kwargs):
+        if Path(path) == blocked:
+            raise PermissionError("in use by another process")
+        return unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "unlink", held_open)
+    if operation == "clear":
+        assert cache.clear() == (current, 2)  # the entries it did remove are still counted
+    else:
+        cache.prune()
+    assert list(legacy.iterdir()) == [blocked]
+
+
 def test_clear_cache_reports_legacy_entries_when_current_cache_is_missing(capsys, legacy_cache):
     legacy, current = legacy_cache
     (legacy / ENTRY_NAME).write_text("{}", encoding="utf-8")

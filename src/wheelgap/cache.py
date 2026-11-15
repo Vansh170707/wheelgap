@@ -221,16 +221,18 @@ def _own_files(folder: Path) -> Iterator[os.DirEntry[str]]:
                 yield entry
 
 
-def _clear_folder(folder: Path) -> int:
-    """Delete wheelgap's own files and remove an empty cache folder, never following a link."""
+def _clear_folder(folder: Path, *, best_effort: bool = False) -> int:
+    """Delete wheelgap's own files and remove an empty cache folder, never following a link. With
+    best_effort, a file that can't be deleted is skipped instead of stopping the rest."""
     if not _own_folder(folder):
         return 0
+    skip = OSError if best_effort else FileNotFoundError  # another run may have removed it
     count = 0
     for entry in _own_files(folder):
-        with contextlib.suppress(FileNotFoundError):  # another run may have removed it
+        with contextlib.suppress(skip):
             os.unlink(entry.path)
             count += bool(_ENTRY.fullmatch(entry.name))
-    with contextlib.suppress(FileNotFoundError):
+    with contextlib.suppress(skip):
         (folder / "last-prune").unlink()  # a link here is removed itself, not its target
     with contextlib.suppress(OSError):  # not empty: another run saved meanwhile, or someone else's file
         folder.rmdir()
@@ -244,7 +246,7 @@ def prune(max_age: float = MAX_AGE) -> None:
     try:
         folder = cache_dir()
         with contextlib.suppress(OSError):
-            _clear_folder(folder.parent / "pinned-v1")  # obsolete: remove entries of any age
+            _clear_folder(folder.parent / "pinned-v1", best_effort=True)  # obsolete: entries of any age
         if not _own_folder(folder):
             return
         marker = folder / "last-prune"
@@ -271,5 +273,5 @@ def clear() -> tuple[Path, int]:
         raise OSError(f"{folder} is a link or not a folder, so wheelgap won't clear it; remove it yourself")
     count = _clear_folder(folder)
     with contextlib.suppress(OSError):  # an obsolete folder we can't empty never fails --clear-cache
-        count += _clear_folder(folder.parent / "pinned-v1")
+        count += _clear_folder(folder.parent / "pinned-v1", best_effort=True)
     return folder, count
